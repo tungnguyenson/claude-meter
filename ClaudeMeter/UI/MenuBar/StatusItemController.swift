@@ -47,6 +47,7 @@ class StatusItemController: NSObject {
     private let appState: AppState
     private var cancellables = Set<AnyCancellable>()
     private var eventMonitor: Any?
+    private var appearanceObservation: NSKeyValueObservation?
 
     // Progress icon configuration
     private let iconSize: CGFloat = 18
@@ -70,7 +71,25 @@ class StatusItemController: NSObject {
             }
             button.action = #selector(togglePopover(_:))
             button.target = self
+            observeAppearanceChanges(button: button)
         }
+    }
+
+    /// The menu bar redraws only on a poll tick, and its colors are resolved
+    /// once per render — so an appearance change needs an explicit redraw.
+    /// The button's own appearance is the one signal that covers both causes:
+    /// a system Light/Dark switch and a wallpaper-driven menu bar flip.
+    private func observeAppearanceChanges(button: NSStatusBarButton) {
+        appearanceObservation = button.observe(\.effectiveAppearance) { [weak self] _, _ in
+            Task { @MainActor in
+                self?.rerenderForAppearanceChange()
+            }
+        }
+    }
+
+    /// Re-applies the current rendering against the new menu bar appearance.
+    private func rerenderForAppearanceChange() {
+        updateMenuBarDisplay(with: appState.usageData, settings: appState.settings)
     }
 
     private func setupPopover() {
@@ -116,8 +135,8 @@ class StatusItemController: NSObject {
         case .compact:
             updateCompactMode(button: button, usage: fiveHourUsage, color: fiveHourColor)
         case .detailed:
-            let palette = MenuBarColorPalette.resolve(from: settings)
-            updateDetailedMode(button: button, data: data, style: settings.detailedModeStyle, palette: palette)
+            let color = MenuBarAppearance.labelColor(for: button.effectiveAppearance)
+            updateDetailedMode(button: button, data: data, style: settings.detailedModeStyle, color: color)
         }
     }
 
@@ -138,18 +157,21 @@ class StatusItemController: NSObject {
 
     /// Renders each window as `[icon] used% trailing`, matching the reference
     /// menu-bar design: the percentage takes the usage colour, while the icon
-    /// and trailing label take the resolved `palette` colours — the muted
-    /// secondary tone by default, or the user's custom icon/text colours when
-    /// enabled in Appearance settings. A thin vertical divider separates the
-    /// 5-hour (clock) and 7-day (calendar) windows.
-    private func updateDetailedMode(button: NSStatusBarButton, data: UsageData?, style: DetailedModeStyle, palette: MenuBarColorPalette) {
+    /// and trailing label take the system label colour, so they sit at the same
+    /// weight as the clock and battery readouts. A thin vertical divider
+    /// separates the 5-hour (clock) and 7-day (calendar) windows.
+    private func updateDetailedMode(button: NSStatusBarButton, data: UsageData?, style: DetailedModeStyle, color: NSColor) {
         button.image = nil
 
         guard let data = data else {
-            button.attributedTitle = mutedTitle("-- | --", color: palette.text)
+            button.attributedTitle = mutedTitle("-- | --", color: color)
             return
         }
 
+        // Rebuilt per render rather than cached: toggling "24-hour time" in
+        // System Settings changes the hour cycle without changing the locale
+        // identifier, so a long-lived formatter would keep the stale format.
+        let resetFormatter = ResetTimeFormatter()
         var segments: [NSAttributedString] = []
 
         if let fiveHour = data.fiveHour {
@@ -160,7 +182,8 @@ class StatusItemController: NSObject {
                 style: style,
                 units: .hoursMinutes,
                 duration: Constants.Window.fiveHourDuration,
-                palette: palette
+                color: color,
+                resetFormatter: resetFormatter
             ))
         }
 
@@ -172,18 +195,19 @@ class StatusItemController: NSObject {
                 style: style,
                 units: .daysHours,
                 duration: Constants.Window.sevenDayDuration,
-                palette: palette
+                color: color,
+                resetFormatter: resetFormatter
             ))
         }
 
         guard !segments.isEmpty else {
-            button.attributedTitle = mutedTitle("No data", color: palette.text)
+            button.attributedTitle = mutedTitle("No data", color: color)
             return
         }
 
         let title = NSMutableAttributedString()
         for (index, segment) in segments.enumerated() {
-            if index > 0 { title.append(dividerString(color: palette.text)) }
+            if index > 0 { title.append(dividerString(color: color)) }
             title.append(segment)
         }
         button.attributedTitle = title
@@ -196,9 +220,10 @@ class StatusItemController: NSObject {
 
     /// Builds one window's `[icon] used% trailing` run.
     /// The percentage is always the used utilization (coloured by level). The
-    /// trailing label is the time-until-reset in `.countdown` style — falling
-    /// back to the fixed "5h"/"7d" label when no reset time is known — and the
-    /// fixed label in `.fixed` style.
+    /// trailing label is the time-until-reset in `.countdown` style, the reset
+    /// clock time in `.resetTime` style — both falling back to the fixed
+    /// "5h"/"7d" label when no reset time is known — and the fixed label in
+    /// `.fixed` style.
     private func windowSegment(
         _ window: UsageWindow,
         symbol: String,
@@ -206,7 +231,8 @@ class StatusItemController: NSObject {
         style: DetailedModeStyle,
         units: MenuBarCountdownFormatter.Units,
         duration: TimeInterval,
-        palette: MenuBarColorPalette
+        color: NSColor,
+        resetFormatter: ResetTimeFormatter
     ) -> NSAttributedString {
         let usage = window.utilization
         let forecast = WindowForecast.make(utilization: usage, resetsAt: window.resetsAt, duration: duration)
@@ -218,10 +244,12 @@ class StatusItemController: NSObject {
             trailing = fixedLabel
         case .countdown:
             trailing = countdownLabel(until: window.resetsAt, units: units) ?? fixedLabel
+        case .resetTime:
+            trailing = resetFormatter.label(for: window.resetsAt) ?? fixedLabel
         }
 
         let segment = NSMutableAttributedString()
-        segment.append(symbolString(symbol, color: palette.icon))
+        segment.append(symbolString(symbol, color: color))
         segment.append(NSAttributedString(string: "  ", attributes: [.font: labelFont]))
         segment.append(NSAttributedString(string: "\(Int(usage))%", attributes: [
             .foregroundColor: percentColor,
@@ -229,7 +257,7 @@ class StatusItemController: NSObject {
         ]))
         segment.append(NSAttributedString(string: " ", attributes: [.font: labelFont]))
         segment.append(NSAttributedString(string: trailing, attributes: [
-            .foregroundColor: palette.text,
+            .foregroundColor: color,
             .font: labelFont
         ]))
         return segment
@@ -401,28 +429,73 @@ class StatusItemController: NSObject {
     }
 
     deinit {
+        appearanceObservation?.invalidate()
         if let monitor = eventMonitor {
             NSEvent.removeMonitor(monitor)
         }
     }
 }
 
-// MARK: - Menu Bar Color Palette
+// MARK: - Menu Bar Appearance
 
-/// Resolves the icon and text colors for the Detailed menu-bar mode.
-/// When custom colors are disabled the app falls back to the adaptive
-/// `.secondaryLabelColor` — its original appearance.
-struct MenuBarColorPalette {
-    let icon: NSColor
-    let text: NSColor
-
-    static func resolve(from settings: AppSettings) -> MenuBarColorPalette {
-        guard settings.customMenuBarColorsEnabled else {
-            return MenuBarColorPalette(icon: .secondaryLabelColor, text: .secondaryLabelColor)
+/// The appearance the menu bar is drawn in.
+///
+/// macOS tints the menu bar from the desktop wallpaper, so it can draw
+/// white-on-dark while the system — and `AppleInterfaceStyle` — are still
+/// Light. Only the status bar button reports that appearance.
+enum MenuBarAppearance {
+    /// The system label color, at the same weight as the clock and battery
+    /// readouts, flattened for `appearance`. Flattening matters because a
+    /// dynamic catalog color stored in the status item's attributed title keeps
+    /// resolving to its old value after a switch.
+    static func labelColor(for appearance: NSAppearance) -> NSColor {
+        var flattened = NSColor.labelColor
+        appearance.performAsCurrentDrawingAppearance {
+            flattened = NSColor.labelColor.usingColorSpace(.sRGB) ?? .labelColor
         }
-        return MenuBarColorPalette(
-            icon: NSColor(Color(hex: settings.menuBarIconColorHex)),
-            text: NSColor(Color(hex: settings.menuBarTextColorHex))
-        )
+        return flattened
+    }
+}
+
+// MARK: - Reset Time Formatter
+
+/// Renders the exact reset clock time, e.g. "15:30" — or "3:30 PM" on a 12-hour
+/// machine. A reset that does not fall on the current day is prefixed with the
+/// localized short weekday, e.g. "Thu 15:30".
+struct ResetTimeFormatter {
+    private let time: DateFormatter
+    private let weekday: DateFormatter
+    private let calendar: Calendar
+
+    init(locale: Locale = .current, timeZone: TimeZone = .current, calendar: Calendar = .current) {
+        var resolvedCalendar = calendar
+        resolvedCalendar.locale = locale
+        resolvedCalendar.timeZone = timeZone
+        self.calendar = resolvedCalendar
+
+        let time = DateFormatter()
+        time.locale = locale
+        time.timeZone = timeZone
+        time.calendar = resolvedCalendar
+        time.dateStyle = .none
+        time.timeStyle = .short
+        self.time = time
+
+        let weekday = DateFormatter()
+        weekday.locale = locale
+        weekday.timeZone = timeZone
+        weekday.calendar = resolvedCalendar
+        weekday.setLocalizedDateFormatFromTemplate("EEE")
+        self.weekday = weekday
+    }
+
+    /// Returns nil when the reset time is missing or already past, so callers
+    /// can fall back to the fixed "5h"/"7d" label — same as `.countdown`.
+    func label(for resetsAt: Date?, now: Date = Date()) -> String? {
+        guard let resetsAt, resetsAt > now else { return nil }
+
+        let clock = time.string(from: resetsAt)
+        guard !calendar.isDate(resetsAt, inSameDayAs: now) else { return clock }
+        return "\(weekday.string(from: resetsAt)) \(clock)"
     }
 }

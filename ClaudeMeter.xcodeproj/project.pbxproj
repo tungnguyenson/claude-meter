@@ -76,7 +76,9 @@
 		/* Test Files */
 		TST001 /* APIServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TST_SRC001; };
 		TST002 /* MockURLProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = TST_SRC002; };
-		TST010 /* CustomMenuBarColorsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TST_SRC010; };
+		TST010 /* ColorExtensionsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TST_SRC010; };
+		TST011 /* ResetTimeFormatterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TST_SRC011; };
+		TST012 /* AppSettingsPersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TST_SRC012; };
 		TST003 /* KeychainServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TST_SRC003; };
 		TST020 /* ClaudeCodeVersionResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TST_SRC020; };
 		TST004 /* UsageManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = TST_SRC004; };
@@ -191,7 +193,9 @@
 		/* Test Sources */
 		TST_SRC001 /* APIServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIServiceTests.swift; sourceTree = "<group>"; };
 		TST_SRC002 /* MockURLProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MockURLProtocol.swift; sourceTree = "<group>"; };
-		TST_SRC010 /* CustomMenuBarColorsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomMenuBarColorsTests.swift; sourceTree = "<group>"; };
+		TST_SRC010 /* ColorExtensionsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorExtensionsTests.swift; sourceTree = "<group>"; };
+		TST_SRC011 /* ResetTimeFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResetTimeFormatterTests.swift; sourceTree = "<group>"; };
+		TST_SRC012 /* AppSettingsPersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettingsPersistenceTests.swift; sourceTree = "<group>"; };
 		TST_SRC040 /* MenuBarCountdownFormatterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarCountdownFormatterTests.swift; sourceTree = "<group>"; };
 		TST_SRC003 /* KeychainServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainServiceTests.swift; sourceTree = "<group>"; };
 		TST_SRC020 /* ClaudeCodeVersionResolverTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeCodeVersionResolverTests.swift; sourceTree = "<group>"; };
@@ -420,7 +424,9 @@
 				GRP_TST_MOCKS /* Mocks */,
 				GRP_TST_UTILITIES /* TestUtilities */,
 				TST_SRC002 /* MockURLProtocol.swift */,
-				TST_SRC010 /* CustomMenuBarColorsTests.swift */,
+				TST_SRC010 /* ColorExtensionsTests.swift */,
+				TST_SRC011 /* ResetTimeFormatterTests.swift */,
+				TST_SRC012 /* AppSettingsPersistenceTests.swift */,
 				TST_SRC040 /* MenuBarCountdownFormatterTests.swift */,
 			);
 			path = ClaudeMeterTests;
@@ -661,7 +667,9 @@
 			files = (
 				TST001 /* APIServiceTests.swift in Sources */,
 				TST002 /* MockURLProtocol.swift in Sources */,
-				TST010 /* CustomMenuBarColorsTests.swift in Sources */,
+				TST010 /* ColorExtensionsTests.swift in Sources */,
+				TST011 /* ResetTimeFormatterTests.swift in Sources */,
+				TST012 /* AppSettingsPersistenceTests.swift in Sources */,
 				TST003 /* KeychainServiceTests.swift in Sources */,
 				TST020 /* ClaudeCodeVersionResolverTests.swift in Sources */,
 				TST004 /* UsageManagerTests.swift in Sources */,
